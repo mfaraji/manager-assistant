@@ -1,0 +1,162 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Ticket Grooming Automation
+Resources:
+  JiraLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      LayerName: jira-layer
+      Description: Layer containing Jira SDK and dependencies
+      ContentUri: ../layers
+      CompatibleRuntimes:
+        - python3.9
+      RetentionPolicy: Retain
+  BedrockAgentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: bedrock.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+      Policies:
+        - PolicyName: BedrockAgentPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0
+        - PolicyName: LambdaInvokePermission
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource: !GetAtt FetchTicketsFunction.Arn
+  ManagerAssistantAgent:
+    Type: AWS::Bedrock::Agent
+    Properties:
+      AgentName: manager-assistant-agent
+      Description: Agent for analyzing and grooming Jira tickets
+      AgentResourceRoleArn: !GetAtt BedrockAgentRole.Arn
+      FoundationModel: anthropic.claude-3-5-sonnet-20241022-v2:0
+      IdleSessionTTLInSeconds: 1800
+      Instruction: |
+        You are a ticket grooming assistant that helps analyze and improve Jira tickets.
+
+        Your role is to:
+
+        1. Review ticket descriptions and acceptance criteria
+        2. Identify missing information or unclear requirements
+        3. Suggest improvements to make tickets more actionable
+        4. Ensure tickets follow best practices for clarity and completeness
+
+        To fetch ticket information, use the FetchTickets action by providing a list of ticket IDs.
+      ActionGroups:
+        - ActionGroupName: TicketOperations
+          Description: Group for ticket-related operations
+          ActionGroupExecutor:
+            Lambda: !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}-FetchTicketsFunction"
+          FunctionSchema:
+            Functions:
+              - Name: FetchTickets
+                Description: Fetches ticket information from Jira
+                Parameters:
+                  ticket_ids:
+                    Type: array
+                    Description: List of Jira ticket IDs to fetch
+                    Required: true
+  FetchTicketsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/fetch_tickets.lambda_handler
+      Runtime: python3.9
+      CodeUri: src/lambdas
+      Timeout: 30
+      Environment:
+        Variables:
+          JIRA_URL:
+            Ref: JiraBaseUrl
+      Policies:
+        - AmazonDynamoDBReadOnlyAccess
+        - SecretsManagerReadWrite
+      Layers:
+        - Ref: JiraLayer
+    Metadata:
+      SamResourceId: FetchTicketsFunction
+  AnalyzeTicketsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Lambda function to analyze tickets using Bedrock
+      Handler: src/lambdas/analyze_tickets.lambda_handler
+      Runtime: python3.9
+      CodeUri: src/lambdas
+      Timeout: 30
+      Environment:
+        Variables:
+          BEDROCK_ENDPOINT:
+            Ref: BedrockEndpoint
+          AGENT_ID:
+            Ref: ManagerAssistantAgent
+      Policies:
+        - SecretsManagerReadWrite
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeAgent
+              Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/${ManagerAssistantAgent}
+      Layers:
+        - Ref: JiraLayer
+    Metadata:
+      SamResourceId: AnalyzeTicketsFunction
+  UpdateJiraFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: src/lambdas/update_jira.lambda_handler
+      Runtime: python3.9
+      CodeUri: src/lambdas
+      Timeout: 30
+      Layers:
+        - Ref: JiraLayer
+    Metadata:
+      SamResourceId: UpdateJiraFunction
+  GroomingEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: GroomingAutomationRule
+      Description:
+        EventBridge rule to trigger the grooming automation Lambda function
+        every two weeks.
+      ScheduleExpression: rate(14 days)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt FetchTicketsFunction.Arn
+          Id: FetchTicketsTarget
+  JiraCredentialsSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: jiraCredentials
+      Description: Jira API credentials for Ticket Grooming Automation
+      SecretString:
+        !Sub "{\n  \"jira_api_user\": \"${JiraApiUser}\",\n  \"jira_api_token\"\
+        : \"${JiraApiToken}\",\n  \"jira_base_url\": \"${JiraBaseUrl}\"\n}\n"
+Parameters:
+  JiraApiUser:
+    Type: String
+    Description: Jira API username (e.g., email address)
+  JiraApiToken:
+    Type: String
+    Description: Jira API token for authentication
+  JiraBaseUrl:
+    Type: String
+    Description: Base URL for your Jira instance (e.g., https://your-domain.atlassian.net)
+  BedrockEndpoint:
+    Type: String
+    Description: Amazon Bedrock endpoint for LLM analysis

@@ -1,0 +1,9 @@
+parameters.json
+.aws-sam
+.DS_Store
+.env
+.venv
+.vscode
+.idea
+jira-layer.zip
+layers/python/*

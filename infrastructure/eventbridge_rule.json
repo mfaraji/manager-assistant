@@ -1,0 +1,12 @@
+{
+  "Name": "GroomingAutomationRule",
+  "Description": "EventBridge rule to trigger the grooming automation Lambda function every two weeks.",
+  "ScheduleExpression": "rate(14 days)",
+  "State": "ENABLED",
+  "Targets": [
+    {
+      "Id": "FetchTicketsLambdaTarget",
+      "Arn": "arn:aws:lambda:us-west-2:123456789012:function:FetchTicketsFunction"
+    }
+  ]
+}
