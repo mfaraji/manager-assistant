@@ -1,5 +1,13 @@
 import json
+import os
+import sys
 from typing import Dict, Any
+
+# Add the parent directory to the path so we can import the common module
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.append(parent_dir)
+
 from common.ticket_parser import parse_tickets
 from common.jira_client import get_jira_client
 
@@ -17,8 +25,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     """
     try:
         # Get ticket IDs from the event payload
-        payload = json.loads(event.get('Payload', '{}'))
-        ticket_ids = payload.get('ticketIds', [])
+        ticket_ids = event.get('ticket_ids', [])
         
         if not ticket_ids:
             return {

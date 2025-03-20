@@ -76,7 +76,7 @@ Resources:
   FetchTicketsFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/lambdas/fetch_tickets.lambda_handler
+      Handler: fetch_tickets.lambda_handler
       Runtime: python3.9
       CodeUri: src/lambdas
       Timeout: 30
@@ -84,6 +84,8 @@ Resources:
         Variables:
           JIRA_URL:
             Ref: JiraBaseUrl
+          BEDROCK_ENDPOINT:
+            Ref: BedrockEndpoint
       Policies:
         - AmazonDynamoDBReadOnlyAccess
         - SecretsManagerReadWrite
@@ -95,23 +97,32 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Description: Lambda function to analyze tickets using Bedrock
-      Handler: src/lambdas/analyze_tickets.lambda_handler
+      Handler: analyze_tickets.lambda_handler
       Runtime: python3.9
       CodeUri: src/lambdas
-      Timeout: 30
+      Timeout: 300
+      MemorySize: 512
       Environment:
         Variables:
           BEDROCK_ENDPOINT:
             Ref: BedrockEndpoint
           AGENT_ID:
             Ref: ManagerAssistantAgent
+          AGENT_ALIAS_ID:
+            Ref: AgentAliasId
+          DEFAULT_JQL_QUERY:
+            Ref: DefaultJqlQuery
       Policies:
         - SecretsManagerReadWrite
         - Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeAgent
-              Resource: !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/${ManagerAssistantAgent}
+                - bedrock-agent-runtime:InvokeAgent
+                - bedrock-agent:InvokeAgent
+              Resource:
+                - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent/${ManagerAssistantAgent}
+                - !Sub arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:agent-alias/${ManagerAssistantAgent}/*
       Layers:
         - Ref: JiraLayer
     Metadata:
@@ -119,10 +130,14 @@ Resources:
   UpdateJiraFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: src/lambdas/update_jira.lambda_handler
+      Handler: update_jira.lambda_handler
       Runtime: python3.9
       CodeUri: src/lambdas
       Timeout: 30
+      Environment:
+        Variables:
+          BEDROCK_ENDPOINT:
+            Ref: BedrockEndpoint
       Layers:
         - Ref: JiraLayer
     Metadata:
@@ -159,4 +174,12 @@ Parameters:
     Description: Base URL for your Jira instance (e.g., https://your-domain.atlassian.net)
   BedrockEndpoint:
     Type: String
-    Description: Amazon Bedrock endpoint for LLM analysis
+    Description: Amazon Bedrock endpoint for agent runtime
+    Default: bedrock-agent-runtime.us-east-1.amazonaws.com
+  DefaultJqlQuery:
+    Type: String
+    Description: Default JQL query for fetching tickets to analyze
+  AgentAliasId:
+    Type: String
+    Description: Bedrock agent alias ID (typically 'TSTALIASID' for the latest draft version)
+    Default: TSTALIASID

@@ -13,9 +13,10 @@ def parse_ticket(issue: Issue) -> Dict[str, Any]:
         Dict[str, Any]: Dictionary containing parsed ticket information
     """
     return {
-        "id": issue.key,
-        "title": issue.fields.summary,
+        "key": issue.key,
+        "summary": issue.fields.summary,
         "description": issue.fields.description,
+        "status": issue.fields.status.name,
         "comments": [
             {
                 "author": comment.author.displayName,

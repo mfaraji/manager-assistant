@@ -6,6 +6,7 @@ PARAMETERS_FILE:= parameters.json
 S3_BUCKET:= ticket-grooming-automation-artifacts
 LAYERS_DIR:= layers
 REQUIREMENTS_FILE:= src/layers/requirements.txt
+JQL_QUERY := $(shell jq -r '.DefaultJqlQuery' parameters.json | sed 's/"/\\"/g' | sed 's/ /\\ /g')
 
 .PHONY: all
 all: build package deploy
@@ -35,11 +36,12 @@ package: create-bucket
 	sam package --template-file $(BUILD_DIR)/template.yaml \
 	--output-template-file $(BUILD_DIR)/packaged.yaml \
 	--s3-bucket $(S3_BUCKET) \
+	--no-progressbar
 
 .PHONY: deploy
 deploy:
 	@echo "Deploying AWS SAM application..."
-	@JQL_QUERY=$$(jq -r '.JqlQuery' $(PARAMETERS_FILE) | sed 's/"/\\"/g') && \
+	@echo "Using DefaultJqlQuery: '$$JQL_QUERY'"
 	sam deploy --template-file $(BUILD_DIR)/packaged.yaml \
 	--stack-name $(STACK_NAME) \
 	--region $(REGION) \
@@ -49,7 +51,7 @@ deploy:
 	JiraApiToken="$$(jq -r '.JiraApiToken' $(PARAMETERS_FILE))" \
 	JiraBaseUrl="$$(jq -r '.JiraBaseUrl' $(PARAMETERS_FILE))" \
 	BedrockEndpoint="$$(jq -r '.BedrockEndpoint' $(PARAMETERS_FILE))" \
-	JqlQuery="$$JQL_QUERY"
+	DefaultJqlQuery="$(JQL_QUERY)"
 
 .PHONY: destroy
 destroy:
