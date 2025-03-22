@@ -5,18 +5,17 @@ from common.ticket_parser import parse_tickets
 from common.jira_client import get_jira_client
 
 
-def get_bedrock_client():
+def get_bedrock_clients():
     """Create and return Bedrock clients."""
     import boto3
     
     # Get the correct endpoint from environment variable
     endpoint_url = os.environ.get('BEDROCK_ENDPOINT')
+    region = os.environ.get('AWS_REGION', 'us-east-1')
     
-    # Check if we have a valid endpoint
+    # Check if we have a valid endpoint for runtime
     if not endpoint_url:
-        # Use regional endpoint if not specified
-        region = os.environ.get('AWS_REGION', 'us-east-1')
-        endpoint_url = f"bedrock-agent-runtime.{region}.amazonaws.com"
+        endpoint_url = f"bedrock-runtime.{region}.amazonaws.com"
     
     # Make sure the endpoint has the proper format
     if not endpoint_url.startswith('https://'):

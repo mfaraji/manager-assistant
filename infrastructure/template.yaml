@@ -183,3 +183,7 @@ Parameters:
     Type: String
     Description: Bedrock agent alias ID (typically 'TSTALIASID' for the latest draft version)
     Default: TSTALIASID
+Outputs:
+  ManagerAssistantAgentId:
+    Description: ID of the Bedrock agent
+    Value: !Ref ManagerAssistantAgent
